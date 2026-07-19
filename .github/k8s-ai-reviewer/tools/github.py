@@ -7,7 +7,6 @@ from requests.exceptions import Timeout, RequestException
 from helpers.helpers import run_command
 from logger import setup_logger
 
-# Initialize logger for GitHub integration
 logger = setup_logger(__name__)
 
 
@@ -78,21 +77,6 @@ def _safe_violation_value(violation, field_name: str, fallback):
 
 
 def _post_with_retry(url: str, payload: dict, headers: dict, max_retries: int = 3) -> requests.Response:
-    """
-    Post to GitHub API with exponential backoff retry logic for rate limits and transient failures.
-    
-    Args:
-        url: GitHub API endpoint URL
-        payload: JSON payload to send
-        headers: Request headers including authorization
-        max_retries: Maximum number of retry attempts (default: 3)
-    
-    Returns:
-        Response object from successful request
-        
-    Raises:
-        RuntimeError: If all retries exhausted or non-retryable error encountered
-    """
     last_response = None
     
     for attempt in range(max_retries):
@@ -178,11 +162,15 @@ def _post_with_retry(url: str, payload: dict, headers: dict, max_retries: int = 
 
 
 def prepare_review_to_github(verdict: str, summary: str, violations: list, git_diffs: dict):
+    logger.info(f"Preparing GitHub review with {len(violations)} violation(s)")
+    
     github_event = "APPROVE" if verdict == "APPROVE" and not violations else "REQUEST_CHANGES"
     anchorable_lines = {
         path: _diff_added_lines(diff_text)
         for path, diff_text in git_diffs.items()
     }
+    
+    logger.debug(f"Anchorable lines per file: {dict((k, len(v)) for k, v in anchorable_lines.items())}")
 
     # 1. individual inline comments
     comments = []
@@ -208,6 +196,11 @@ def prepare_review_to_github(verdict: str, summary: str, violations: list, git_d
             f"#### Suggested Remediation:\n```yaml\n{remediation}\n```"
         )
         file_anchorable_lines = anchorable_lines.get(file_path, set())
+        
+        logger.debug(f"Processing violation for {file_path}:{target_line} (severity: {severity})")
+        logger.debug(f"File has {len(file_anchorable_lines)} anchorable lines")
+        logger.debug(f"Target line {target_line} in anchorable lines: {target_line in file_anchorable_lines}")
+        
         if target_line > 0 and target_line in file_anchorable_lines:
             comments.append({
                 "path": file_path,
@@ -215,20 +208,47 @@ def prepare_review_to_github(verdict: str, summary: str, violations: list, git_d
                 "line": target_line,
                 "side": "RIGHT"
             })
+            logger.info(f"Added inline comment for {file_path}:{target_line}")
         else:
             dropped_inline_comment_count += 1
+            logger.warning(f"Dropped inline comment for {file_path}:{target_line} (not in diff or line <= 0)")
 
     review_body = (
         f"## GitOps K8s AI Review Summary\n"
         f"**Verdict:** {verdict}\n\n"
         f"{summary}\n\n"
-        f"*Total Violations Flagged: {len(violations)}*"
+        f"*Total Violations Flagged: {len(violations)}*\n"
+        f"*Inline Comments Posted: {len(comments)}*"
     )
+    
+    # If no inline comments but violations exist, add detailed findings to review body
+    if violations and not comments:
+        review_body += "\n\n## Detailed Findings\n\n"
+        review_body += "*Note: Inline comments could not be anchored to diff lines. Findings are listed below:*\n\n"
+        for idx, v in enumerate(violations, 1):
+            file_path = _safe_violation_value(v, "file_path", "")
+            severity = _safe_violation_value(v, "severity", "CRITICAL")
+            resource_kind = _safe_violation_value(v, "resource_kind", "Resource")
+            resource_name = _safe_violation_value(v, "resource_name", "Unknown")
+            finding = _safe_violation_value(v, "finding", "")
+            remediation = _safe_violation_value(v, "remediation", "")
+            target_line = _safe_violation_value(v, "target_line", 1)
+            
+            review_body += (
+                f"### {idx}. `{severity}` - {file_path}:{target_line}\n"
+                f"**Resource:** `{resource_kind}/{resource_name}`\n\n"
+                f"{finding}\n\n"
+                f"**Suggested Remediation:**\n```yaml\n{remediation}\n```\n\n"
+                f"---\n\n"
+            )
+    
     if dropped_inline_comment_count:
         review_body += (
             f"\n\n*Note: {dropped_inline_comment_count} finding(s) were included in the summary only "
             f"because they could not be safely anchored to changed lines in this diff.*"
         )
+    
+    logger.info(f"Prepared review: {len(comments)} inline comment(s), {dropped_inline_comment_count} dropped")
 
     return github_event, review_body, comments
 
