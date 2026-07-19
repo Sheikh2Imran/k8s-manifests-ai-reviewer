@@ -1,0 +1,49 @@
+name: "GitOps AI Manifest Reviewer"
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
+    paths:
+#      - 'core-apps/**'
+#      - 'infra-shared/**'
+      - '**.yaml'
+      - '**.yml'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  ai-review:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: "Checkout Manifest Repository Source"
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # all history
+
+      - name: "Initialize Python runtime"
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: ".github/k8s-ai-reviewer/requirements.txt"
+
+      - name: "Install Required Core Modules"
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r .github/k8s-ai-reviewer/requirements.txt
+
+      - name: "Execute LangGraph AI Engine Layer"
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          export PYTHONPATH="${{ github.workspace }}/.github/k8s-ai-reviewer"          
+          python .github/k8s-ai-reviewer/main.py
