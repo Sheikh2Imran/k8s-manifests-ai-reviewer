@@ -71,10 +71,7 @@ def reliability_agent_node(state: ReviewState) -> dict:
             "2. **Conditional InitContainers Validation (Optional Gates):**\n"
             "   Deployments can legally have 0, 1, or 2 initContainers. They are NOT mandatory. However, IF they are present, "
             "   you must strictly validate their naming patterns and command structural compliance:\n"
-            "   - If an initContainer is named `kafka-wait`, it MUST use the `busybox:latest` image and execute a command checking "
-            "     target connectivity via `nc -zv <KAFKA_SERVER> <KAFKA_PORT>` inside a retry loop.\n"
-            "   - If an initContainer is named `redis-wait`, it MUST use the `busybox:latest` image and execute a command checking "
-            "     target connectivity via `nc -zv <REDIS_SERVER> <REDIS_PORT>` inside a retry loop.\n"
+            "   - If an initContainer, it MUST use the valid image and execute a command checking "
             "   - Flag a CRITICAL violation ONLY if an initContainer with these names exists but has incorrect images, bad command logic, "
             "     or if an unrecognized initContainer name is introduced outside of this standard topology.\n\n"
 
@@ -106,7 +103,7 @@ def resource_agent_node(state: ReviewState) -> dict:
             "Analyze the manifests and trigger a CRITICAL violation if:\n"
             "1. **Resource Availability & Boundaries:**\n"
             "   - The container MUST explicitly define BOTH `requests` and `limits` for both CPU and Memory.\n"
-            "   - The specific values can be variable, but the **Memory Request (`requests.memory`) MUST NOT exceed 2Gi** (2 Gigabytes / 2048Mi).\n"
+            "   - The specific values can be variable, but the **Memory Request (`requests.memory`) MUST NOT exceed 1Gi** (1 Gigabytes / 1024Mi).\n"
             "   - Flag as CRITICAL if `resources`, `requests`, or `limits` are missing entirely, or if the memory request exceeds 2Gi.\n\n"
 
             "2. **Environmental Sourcing:** Ensure the deployment specifies an environment configuration using **both** "
