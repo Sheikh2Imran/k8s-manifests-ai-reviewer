@@ -80,7 +80,7 @@ def write_pr_review(github_event, review_body, comments):
     }
     response = requests.post(url, json=payload, headers=headers)
 
-    if response.status_code == 201:
+    if response.status_code in [200, 201]:
         print("Successfully posted Review to GitHub.")
     else:
         print(f"Failed to post review. Server responded with status {response.status_code}: {response.text}")
