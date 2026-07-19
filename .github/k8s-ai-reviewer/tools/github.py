@@ -40,7 +40,8 @@ def prepare_review_to_github(verdict: str, summary: str, violations: list):
         comments.append({
             "path": v.file_path,
             "body": body_markdown,
-            "position": 1
+            "line": int(v.target_line),
+            "side": "RIGHT"
         })
 
     review_body = (
