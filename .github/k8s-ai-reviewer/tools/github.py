@@ -28,20 +28,18 @@ def gather_github_pr_context():
 def prepare_review_to_github(verdict: str, summary: str, violations: list):
     github_event = "APPROVE" if verdict == "APPROVE" and not violations else "REQUEST_CHANGES"
 
-    # 1. Format individual inline comments mapping to specific files
+    # 1. individual inline comments
     comments = []
     for v in violations:
         body_markdown = (
-            f"### 🤖 AI Reviewer Finding: `{v['severity']}`\n"
-            f"**Resource:** `{v['resource_kind']}/{v['resource_name']}`\n\n"
-            f"{v['finding']}\n\n"
-            f"#### 🛠️ Suggested Remediation:\n```yaml\n{v['remediation']}\n```"
+            f"### 🤖 AI Reviewer Finding: `{v.severity}`\n"
+            f"**Resource:** `{v.resource_kind}/{v.resource_name}`\n\n"
+            f"{v.finding}\n\n"
+            f"#### 🛠️ Suggested Remediation:\n```yaml\n{v.remediation}\n```"
         )
         comments.append({
-            "path": v["file_path"],
+            "path": v.file_path,
             "body": body_markdown,
-            # For simplicity across standard diffs, we append to the file generally.
-            # In advanced setups, you can calculate the exact diff line position.
             "position": 1
         })
 
