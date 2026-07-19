@@ -8,6 +8,7 @@ class ViolationItem(BaseModel):
     severity: str = Field(description="Must be CRITICAL (Blocks deployment), WARNING (High risk), or INFO")
     finding: str = Field(description="Detailed architectural or security explanation of the issue.")
     remediation: str = Field(description="Provide exact corrected YAML block snippet or exact action required.")
+    target_line: int = Field(default=1, description="The exact integer line number in the file where this configuration block or error resides.")
 
 class AgentReviewResult(BaseModel):
     agent_name: str = Field(description="Name of the specialized reviewing agent.")

@@ -39,6 +39,8 @@ def security_agent_node(state: ReviewState) -> dict:
         ("system", (
             "You are an expert DevSecOps Platform Engineer.\n"
             "Review the manifests against our mandatory security rules. Flag a CRITICAL violation if:\n"
+            "For every violation discovered, trace the structural path down to the exact input block and provide \n"
+            "the corresponding file 'target_line' integer.\n"
             "1. A `Deployment` or `CronJob` does not explicitly declare `imagePullSecrets` to fetch images securely.\n"
             "2. Critical sensitive strings are hardcoded in the plain `env:` array instead of using `secretRef` mappings.\n"
             "3. Containers lack an explicit `securityContext` setting (e.g. running as root, missing read-only root filesystems)."
@@ -59,7 +61,10 @@ def reliability_agent_node(state: ReviewState) -> dict:
     prompt = ChatPromptTemplate.from_messages([
         ("system", (
             "You are a Principal SRE Architect. Our organization enforces a strict mandatory structural blueprint "
-            "for every single Deployment manifest. You must validate the manifests against this baseline.\n\n"
+            "for every single Deployment manifest. You must validate the manifests against this baseline.\n"
+            "For every violation discovered, trace the structural path down to the exact input block and provide \n"
+            "the corresponding file 'target_line' integer (e.g. if livenessProbe is completely missing or blank, \n"
+            "target the 'containers' structural declaration block line).\n\n"
 
             "CRITICAL RULES YOU MUST ENFORCE:\n"
             "1. **Labels & Selectors:** Both `metadata.labels` and `spec.selector.matchLabels` and `spec.template.metadata.labels` "
@@ -101,6 +106,8 @@ def resource_agent_node(state: ReviewState) -> dict:
         ("system", (
             "You are a GitOps Orchestration Engine enforcing cluster efficiency.\n"
             "Analyze the manifests and trigger a CRITICAL violation if:\n"
+            "For every violation discovered, trace the structural path down to the exact input block and provide \n"
+            "the corresponding file 'target_line' integer\n"
             "1. **Resource Availability & Boundaries:**\n"
             "   - The container MUST explicitly define BOTH `requests` and `limits` for both CPU and Memory.\n"
             "   - The specific values can be variable, but the **Memory Request (`requests.memory`) MUST NOT exceed 1Gi** (1 Gigabytes / 1024Mi).\n"
