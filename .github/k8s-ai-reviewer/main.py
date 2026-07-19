@@ -38,6 +38,9 @@ if __name__ == "__main__":
         }
 
         runtime_output = app_graph.invoke(initial_inputs)
+        
+        logger.debug(f"Runtime output keys: {runtime_output.keys()}")
+        logger.info(f"Violations count: {len(runtime_output.get('aggregated_violations', []))}")
 
         # Route output to GitHub API Router
         github_event, review_body, comments = prepare_review_to_github(
