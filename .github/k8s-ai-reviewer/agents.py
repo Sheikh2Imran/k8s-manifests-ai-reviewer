@@ -11,6 +11,7 @@ llm = ChatOpenAI(
     max_retries=2
 ).with_structured_output(AgentReviewResult)
 
+
 # Node 1: Sanitization
 def preprocess_sanitizer_node(state: ReviewState) -> dict:
     sanitized = {}
@@ -45,7 +46,13 @@ def security_agent_node(state: ReviewState) -> dict:
             "You are an expert DevSecOps Platform Engineer.\n"
             "Review the manifests against our mandatory security rules. Flag a CRITICAL violation if:\n"
             "For every violation discovered, trace the structural path down to the exact input block and provide \n"
-            "the corresponding file 'target_line' integer.\n"
+            "the corresponding file 'target_line' integer.\n\n"
+
+            "FORMATTING REQUIREMENT:\n"
+            "Any YAML code in the 'remediation' field MUST be formatted as valid Kubernetes YAML blocks. "
+            "Use proper array hyphens (`- `) where appropriate (e.g., list entries under env or imagePullSecrets).\n\n"
+
+            "CRITICAL RULES YOU MUST ENFORCE:\n"
             "1. A `Deployment` or `CronJob` does not explicitly declare `imagePullSecrets` to fetch images securely.\n"
             "2. Critical sensitive strings are hardcoded in the plain `env:` array instead of using `secretRef` mappings.\n"
             "3. Containers lack an explicit `securityContext` setting (e.g. running as root, missing read-only root filesystems)."
@@ -71,6 +78,10 @@ def reliability_agent_node(state: ReviewState) -> dict:
             "the corresponding file 'target_line' integer (e.g. if livenessProbe is completely missing or blank, \n"
             "target the 'containers' structural declaration block line).\n\n"
 
+            "FORMATTING REQUIREMENT:\n"
+            "Any YAML code in the 'remediation' field MUST be formatted as valid Kubernetes YAML blocks. "
+            "Use proper array hyphens (`- `) where appropriate.\n\n"
+
             "CRITICAL RULES YOU MUST ENFORCE:\n"
             "1. **Labels & Selectors:** Both `metadata.labels` and `spec.selector.matchLabels` and `spec.template.metadata.labels` "
             "MUST strictly contain BOTH of these specific keys:\n"
@@ -81,10 +92,12 @@ def reliability_agent_node(state: ReviewState) -> dict:
             "2. **Conditional InitContainers Validation (Optional Gates):**\n"
             "   Deployments can legally have 0, 1, or 2 initContainers. They are NOT mandatory. However, IF they are present, "
             "   you must strictly validate their naming patterns and command structural compliance:\n"
-            "   - Allowed initContainer names are strictly: `wait-for-dependency` and `db-migrations`.\n"
-            "   - Every initContainer must define a non-empty `image` and non-empty `command` array.\n"
-            "   - Placeholder/no-op command patterns are forbidden (e.g. `sleep infinity`, `tail -f /dev/null`).\n"
-            "   - Flag a CRITICAL violation if an unknown initContainer name is present, or if required fields/command quality are invalid.\n\n"
+            "   - If an initContainer is named `kafka-wait`, it MUST use the `busybox:latest` image and execute a command checking "
+            "     target connectivity via `nc -zv <KAFKA_SERVER> <KAFKA_PORT>` inside a retry loop.\n"
+            "   - If an initContainer is named `redis-wait`, it MUST use the `busybox:latest` image and execute a command checking "
+            "     target connectivity via `nc -zv <REDIS_SERVER> <REDIS_PORT>` inside a retry loop.\n"
+            "   - Flag a CRITICAL violation ONLY if an initContainer with these names exists but has incorrect images, bad command logic, "
+            "     or if an unrecognized initContainer name is introduced outside of this standard topology.\n\n"
 
             "3. **Health Observability Probes:** The primary application container MUST declare a full observability suite consisting of:\n"
             "   - `startupProbe`\n"
@@ -116,17 +129,26 @@ def resource_agent_node(state: ReviewState) -> dict:
             "You are a GitOps Orchestration Engine enforcing cluster efficiency.\n"
             "Analyze the manifests and trigger a CRITICAL violation if:\n"
             "For every violation discovered, trace the structural path down to the exact input block and provide \n"
-            "the corresponding file 'target_line' integer\n"
+            "the corresponding file 'target_line' integer.\n\n"
+
+            "FORMATTING REQUIREMENT:\n"
+            "Any YAML code in the 'remediation' field MUST be formatted as valid Kubernetes YAML blocks. "
+            "You MUST use valid list array dash notation (`- `) under sections like `env:`, for example:\n"
+            "env:\n"
+            "  - name: branch\n"
+            "    value: \"main\"\n\n"
+
+            "CRITICAL RULES YOU MUST ENFORCE:\n"
             "1. **Resource Availability & Boundaries:**\n"
             "   - The container MUST explicitly define BOTH `requests` and `limits` for both CPU and Memory.\n"
-            "   - The specific values can be variable, but the **Memory Request (`requests.memory`) MUST NOT exceed 1Gi** (1 Gigabytes / 1024Mi).\n"
-            "   - Flag as CRITICAL if `resources`, `requests`, or `limits` are missing entirely, or if the memory request exceeds 1Gi.\n\n"
+            "   - The specific values can be custom, but the **Memory Request (`requests.memory`) MUST NOT exceed 2Gi**.\n"
+            "   - Flag as CRITICAL if `resources`, `requests`, or `limits` are missing entirely, or if the memory request exceeds 2Gi.\n\n"
 
             "2. **Environmental Sourcing:** Ensure the deployment specifies an environment configuration using **both** "
             "`configMapRef` and `secretRef` globally inside `envFrom`, alongside explicit key-value parameters under `env:` "
-            "(specifically verifying the mandatory `branch` tracking key is populated).\n\n"
+            "(specifically verifying the mandatory `branch` tracking key is populated using valid array item dash syntax).\n\n"
 
-            "3. **Reference Integrity: ** If a deployment references an external configuration name under `configMapRef` or `secretRef`, "
+            "3. **Reference Integrity:** If a deployment references an external configuration name under `configMapRef` or `secretRef`, "
             "and that resource configuration file is included in this PR payload, verify that the names match perfectly."
         )),
         ("human", "Sanitized Manifests:\n{manifests}\n\nGit Diffs:\n{diffs}")
@@ -152,7 +174,7 @@ def final_orchestration_node(state: ReviewState) -> dict:
     if state.get("static_errors"):
         return {
             "final_verdict": "REQUEST_CHANGES",
-            "executive_summary": f"Pre-flight static manifest compilation failed immediately:\n" + "\n".join(
+            "executive_summary": "Pre-flight static manifest compilation failed immediately:\n" + "\n".join(
                 state["static_errors"])
         }
 
