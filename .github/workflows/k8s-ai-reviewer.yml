@@ -1,4 +1,4 @@
-name: "GitOps AI Manifest Reviewer"
+name: "AI YAML Manifest Reviewer"
 
 on:
   pull_request:
