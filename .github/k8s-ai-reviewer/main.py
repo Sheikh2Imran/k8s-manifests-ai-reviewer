@@ -11,10 +11,9 @@ from tools.github import (
 
 logger = setup_logger(__name__)
 
-
 if __name__ == "__main__":
     try:
-        # git fetch origin main
+        # Fetch origin main to build accurate context for diff tracking
         try:
             run_command(["git", "fetch", "origin", "main"])
         except Exception as e:
@@ -38,18 +37,19 @@ if __name__ == "__main__":
         }
 
         runtime_output = app_graph.invoke(initial_inputs)
-        
+
         logger.debug(f"Runtime output keys: {runtime_output.keys()}")
         logger.info(f"Violations count: {len(runtime_output.get('aggregated_violations', []))}")
 
-        # Route output to GitHub API Router
-        github_event, review_body, comments = prepare_review_to_github(
+        # Unpack all 4 outputs returned by the updated tools.github module
+        github_event, review_body, comments, detailed_findings_markdown = prepare_review_to_github(
             verdict=runtime_output.get("final_verdict", "REQUEST_CHANGES"),
             summary=runtime_output.get("executive_summary", ""),
-            violations=runtime_output.get("aggregated_violations", []),
-            git_diffs=git_diffs
+            violations=runtime_output.get("aggregated_violations", [])
         )
-        write_pr_review(github_event, review_body, comments)
+
+        # Post the complete package cleanly to GitHub
+        write_pr_review(github_event, review_body, comments, detailed_findings_markdown)
 
         # Enforce build failure at the CI layer if the agent rejects the changes
         if runtime_output.get("final_verdict") == "REQUEST_CHANGES":
@@ -58,11 +58,11 @@ if __name__ == "__main__":
         else:
             logger.info("Agent approved manifest configurations.")
             sys.exit(0)
-            
+
     except KeyboardInterrupt:
         logger.info("Review interrupted by user.")
-        sys.exit(130)  # Standard exit code for SIGINT
-        
+        sys.exit(130)
+
     except Exception as e:
         logger.error("=" * 80)
         logger.error("FATAL ERROR: AI Reviewer encountered an unrecoverable error")
@@ -76,5 +76,4 @@ if __name__ == "__main__":
         logger.error("2. Verify manifest YAML syntax is valid")
         logger.error("3. Contact platform team if issue persists")
         logger.error("=" * 80)
-        # CRITICAL: Exit with error code 1 to fail the CI build
         sys.exit(1)
