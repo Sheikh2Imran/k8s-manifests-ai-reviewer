@@ -9,10 +9,10 @@ on:
       - synchronize
       - reopened
     paths:
-#      - 'core-apps/**'
-#      - 'infra-shared/**'
-      - '**.yaml'
-      - '**.yml'
+      - 'core-apps/**/*.yaml'
+      - 'core-apps/**/*.yml'
+      - 'infra-shared/**/*.yaml'
+      - 'infra-shared/**/*.yml'
 
 permissions:
   contents: read
@@ -45,5 +45,5 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          export PYTHONPATH="${{ github.workspace }}/.github/k8s-ai-reviewer"          
+          export PYTHONPATH="${{ github.workspace }}/.github/k8s-ai-reviewer"
           python .github/k8s-ai-reviewer/main.py

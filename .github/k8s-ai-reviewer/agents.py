@@ -4,7 +4,12 @@ from langchain_openai import ChatOpenAI
 from state import ReviewState
 from schema import AgentReviewResult, FinalConsolidatedReview
 
-llm = ChatOpenAI(model="gpt-4o", temperature=0.0).with_structured_output(AgentReviewResult)
+llm = ChatOpenAI(
+    model="gpt-4o",
+    temperature=0.0,
+    timeout=60.0,
+    max_retries=2
+).with_structured_output(AgentReviewResult)
 
 # Node 1: Sanitization
 def preprocess_sanitizer_node(state: ReviewState) -> dict:
@@ -76,9 +81,10 @@ def reliability_agent_node(state: ReviewState) -> dict:
             "2. **Conditional InitContainers Validation (Optional Gates):**\n"
             "   Deployments can legally have 0, 1, or 2 initContainers. They are NOT mandatory. However, IF they are present, "
             "   you must strictly validate their naming patterns and command structural compliance:\n"
-            "   - If an initContainer, it MUST use the valid image and execute a command checking "
-            "   - Flag a CRITICAL violation ONLY if an initContainer with these names exists but has incorrect images, bad command logic, "
-            "     or if an unrecognized initContainer name is introduced outside of this standard topology.\n\n"
+            "   - Allowed initContainer names are strictly: `wait-for-dependency` and `db-migrations`.\n"
+            "   - Every initContainer must define a non-empty `image` and non-empty `command` array.\n"
+            "   - Placeholder/no-op command patterns are forbidden (e.g. `sleep infinity`, `tail -f /dev/null`).\n"
+            "   - Flag a CRITICAL violation if an unknown initContainer name is present, or if required fields/command quality are invalid.\n\n"
 
             "3. **Health Observability Probes:** The primary application container MUST declare a full observability suite consisting of:\n"
             "   - `startupProbe`\n"
@@ -86,8 +92,11 @@ def reliability_agent_node(state: ReviewState) -> dict:
             "   - `readinessProbe`\n"
             "   If any of these three probes are missing, empty, or replaced with dots ('...'), flag it as CRITICAL.\n\n"
 
-            "4. **Storage Topology:** The container configuration must specify a standard `volumeMounts` schema that maps accurately "
-            "to a corresponding declaration in the pod `volumes` mapping array referencing a valid `persistentVolumeClaim` backend."
+            "4. **Storage Topology (Conditional):** IF the deployment declares persistent storage (identified by the presence of "
+            "`volumeMounts` or `persistentVolumeClaim` references), then the configuration MUST be complete:\n"
+            "   - Every `volumeMounts` entry must map to a corresponding `volumes` declaration at the pod spec level.\n"
+            "   - Volume sources must use `persistentVolumeClaim` with a valid `claimName` (not emptyDir or hostPath for production workloads).\n"
+            "   - If NO storage is declared (fully stateless deployment), this rule does not apply. Only flag violations when storage is partially configured."
         )),
         ("human", "Sanitized Manifests:\n{manifests}\n\nGit Diffs:\n{diffs}")
     ])
@@ -111,7 +120,7 @@ def resource_agent_node(state: ReviewState) -> dict:
             "1. **Resource Availability & Boundaries:**\n"
             "   - The container MUST explicitly define BOTH `requests` and `limits` for both CPU and Memory.\n"
             "   - The specific values can be variable, but the **Memory Request (`requests.memory`) MUST NOT exceed 1Gi** (1 Gigabytes / 1024Mi).\n"
-            "   - Flag as CRITICAL if `resources`, `requests`, or `limits` are missing entirely, or if the memory request exceeds 2Gi.\n\n"
+            "   - Flag as CRITICAL if `resources`, `requests`, or `limits` are missing entirely, or if the memory request exceeds 1Gi.\n\n"
 
             "2. **Environmental Sourcing:** Ensure the deployment specifies an environment configuration using **both** "
             "`configMapRef` and `secretRef` globally inside `envFrom`, alongside explicit key-value parameters under `env:` "
@@ -133,7 +142,12 @@ def resource_agent_node(state: ReviewState) -> dict:
 
 # Node 5: Final Orchestration Agent
 def final_orchestration_node(state: ReviewState) -> dict:
-    final_llm = ChatOpenAI(model="gpt-4o", temperature=0.0).with_structured_output(FinalConsolidatedReview)
+    final_llm = ChatOpenAI(
+        model="gpt-4o",
+        temperature=0.0,
+        timeout=60.0,
+        max_retries=2
+    ).with_structured_output(FinalConsolidatedReview)
 
     if state.get("static_errors"):
         return {
