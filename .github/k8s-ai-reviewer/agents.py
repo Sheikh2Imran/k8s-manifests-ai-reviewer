@@ -37,11 +37,11 @@ def preprocess_sanitizer_node(state: ReviewState) -> dict:
 def security_agent_node(state: ReviewState) -> dict:
     prompt = ChatPromptTemplate.from_messages([
         ("system", (
-            "You are an expert DevSecOps Site Reliability Engineer specialized in Kubernetes security.\n"
-            "Analyze the following sanitized manifests and diff changes. Look specifically for:\n"
-            "1. Missing `securityContext` definitions (e.g. running as root, writable root filesystems).\n"
-            "2. Insecure plain-text leaks, missing RBAC least-privilege policies, or over-exposed Secrets.\n"
-            "3. Host namespaces usage or dangerous capabilities settings."
+            "You are an expert DevSecOps Platform Engineer.\n"
+            "Review the manifests against our mandatory security rules. Flag a CRITICAL violation if:\n"
+            "1. A `Deployment` or `CronJob` does not explicitly declare `imagePullSecrets` to fetch images securely.\n"
+            "2. Critical sensitive strings are hardcoded in the plain `env:` array instead of using `secretRef` mappings.\n"
+            "3. Containers lack an explicit `securityContext` setting (e.g. running as root, missing read-only root filesystems)."
         )),
         ("human", "Sanitized Manifests:\n{manifests}\n\nGit Diffs:\n{diffs}")
     ])
@@ -58,11 +58,34 @@ def security_agent_node(state: ReviewState) -> dict:
 def reliability_agent_node(state: ReviewState) -> dict:
     prompt = ChatPromptTemplate.from_messages([
         ("system", (
-            "You are an expert Cloud Architect checking structural platform reliability.\n"
-            "Analyze these manifests focusing specifically on:\n"
-            "1. `Service` selector accuracy matching the corresponding `Deployment` labels.\n"
-            "2. Deployments/CronJobs lacking required `livenessProbe`, `readinessProbe`, or `startupProbe` rules.\n"
-            "3. Correct rollout strategy layouts (`maxSurge`, `maxUnavailable`) and valid standard cron syntax configurations."
+            "You are a Principal SRE Architect. Our organization enforces a strict mandatory structural blueprint "
+            "for every single Deployment manifest. You must validate the manifests against this baseline.\n\n"
+
+            "CRITICAL RULES YOU MUST ENFORCE:\n"
+            "1. **Labels & Selectors:** Both `metadata.labels` and `spec.selector.matchLabels` and `spec.template.metadata.labels` "
+            "MUST strictly contain BOTH of these specific keys:\n"
+            "   - `app.kubernetes.io/instance`\n"
+            "   - `app.kubernetes.io/name`\n"
+            "   If either key is missing in any of these three metadata sections, flag it as CRITICAL.\n\n"
+
+            "2. **Conditional InitContainers Validation (Optional Gates):**\n"
+            "   Deployments can legally have 0, 1, or 2 initContainers. They are NOT mandatory. However, IF they are present, "
+            "   you must strictly validate their naming patterns and command structural compliance:\n"
+            "   - If an initContainer is named `kafka-wait`, it MUST use the `busybox:latest` image and execute a command checking "
+            "     target connectivity via `nc -zv <KAFKA_SERVER> <KAFKA_PORT>` inside a retry loop.\n"
+            "   - If an initContainer is named `redis-wait`, it MUST use the `busybox:latest` image and execute a command checking "
+            "     target connectivity via `nc -zv <REDIS_SERVER> <REDIS_PORT>` inside a retry loop.\n"
+            "   - Flag a CRITICAL violation ONLY if an initContainer with these names exists but has incorrect images, bad command logic, "
+            "     or if an unrecognized initContainer name is introduced outside of this standard topology.\n\n"
+
+            "3. **Health Observability Probes:** The primary application container MUST declare a full observability suite consisting of:\n"
+            "   - `startupProbe`\n"
+            "   - `livenessProbe`\n"
+            "   - `readinessProbe`\n"
+            "   If any of these three probes are missing, empty, or replaced with dots ('...'), flag it as CRITICAL.\n\n"
+
+            "4. **Storage Topology:** The container configuration must specify a standard `volumeMounts` schema that maps accurately "
+            "to a corresponding declaration in the pod `volumes` mapping array referencing a valid `persistentVolumeClaim` backend."
         )),
         ("human", "Sanitized Manifests:\n{manifests}\n\nGit Diffs:\n{diffs}")
     ])
@@ -79,12 +102,19 @@ def reliability_agent_node(state: ReviewState) -> dict:
 def resource_agent_node(state: ReviewState) -> dict:
     prompt = ChatPromptTemplate.from_messages([
         ("system", (
-            "You are a FinOps and GitOps Orchestration Engine specialized in continuous reconcile states.\n"
-            "Examine the configs to verify:\n"
-            "1. Explicit container resource allocations (`requests` and `limits` for CPU/Memory).\n"
-            "2. Environmental bindings: If a Deployment references a `ConfigMapKeyRef` or `secretKeyRef`, "
-            "ensure the corresponding key actually exists inside the provided ConfigMap or Secret manifest data structure.\n"
-            "3. Identify orphaned configurations (e.g. Services with no real backing deployment)."
+            "You are a GitOps Orchestration Engine enforcing cluster efficiency.\n"
+            "Analyze the manifests and trigger a CRITICAL violation if:\n"
+            "1. **Resource Availability & Boundaries:**\n"
+            "   - The container MUST explicitly define BOTH `requests` and `limits` for both CPU and Memory.\n"
+            "   - The specific values can be variable, but the **Memory Request (`requests.memory`) MUST NOT exceed 2Gi** (2 Gigabytes / 2048Mi).\n"
+            "   - Flag as CRITICAL if `resources`, `requests`, or `limits` are missing entirely, or if the memory request exceeds 2Gi.\n\n"
+
+            "2. **Environmental Sourcing:** Ensure the deployment specifies an environment configuration using **both** "
+            "`configMapRef` and `secretRef` globally inside `envFrom`, alongside explicit key-value parameters under `env:` "
+            "(specifically verifying the mandatory `branch` tracking key is populated).\n\n"
+
+            "3. **Reference Integrity: ** If a deployment references an external configuration name under `configMapRef` or `secretRef`, "
+            "and that resource configuration file is included in this PR payload, verify that the names match perfectly."
         )),
         ("human", "Sanitized Manifests:\n{manifests}\n\nGit Diffs:\n{diffs}")
     ])
